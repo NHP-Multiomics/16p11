@@ -1,0 +1,327 @@
+###################################################
+module load R/3.5
+library(DESeq2)
+library("RColorBrewer")
+library("ggplot2")
+library("pheatmap")
+setwd("/labs/dflev/ZXL/Tommy/iN_RNA-seq")
+sample<- read.table("iN_sample_anno.txt",head=T)
+gene_count <- read.table("iN_Gene_count_matrix.txt",head =T)
+
+#### Check the total reads for each sample.
+colSums(gene_count)
+ iN_23X10_202_7  iN_23X10_202_8       iN_5401_1  iN_56x16_101_1  iN_56X16_101_2 
+       31943368        26059207        28171085        13814762        27493392 
+  iN_56X9_201_1   iN_56X9_201_2   iN_58X3_101_7   iN_58X3_101_8   iN_65x2_101_1 
+       15424824        28265315        26996370        22324009        13587404 
+  iN_65X2_101_2       iN_6632_4        iN_726_1 iN_81_x16_101_3  iN_81X16_101_4 
+       33434936        25000188        28898934        23922309        29538552 
+        iN_8738 
+       23250383 
+
+#### Build matrix for DE analysis.
+dds <- DESeqDataSetFromMatrix(countData=round(gene_count,0), colData=sample, design=~ Gender + Condition)
+#### Filter genes without reads.
+dds <- dds[ rowSums(counts(dds)) > 1, ]
+dds
+#dim: 33210 16
+
+#### DE analysis.
+dds <- DESeq(dds)
+
+setwd("/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2")
+
+### PCA
+rld <- rlog(dds, blind=FALSE)
+### plot Condition.
+pdf("/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Condition_PCA.pdf")
+plotPCA(rld, intgroup=c("Condition"), ntop=33210)
+dev.off()
+### plot Gender.
+pdf("/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Gender_PCA.pdf")
+plotPCA(rld, intgroup=c("Gender"), ntop=33210)
+dev.off()
+write.table(as.data.frame(assay(rld)),file="/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/All_genes_rld.txt",row.names = T, sep="\t",quote=F)
+### plot Condition + Gender.
+pcaData <- plotPCA(rld, intgroup=c("Condition", "Gender"), ntop=33210,returnData=TRUE) 
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+pdf("/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/PCA.pdf")
+ggplot(pcaData, aes(PC1, PC2, color=Condition, shape=Gender)) +
+geom_point(size=3) +
+xlab(paste0("PC1: ",percentVar[1],"% variance")) + ylab(paste0("PC2: ",percentVar[2],"% variance")) + coord_fixed()
+dev.off()
+
+### plot Condition + Gender.
+pcaData <- plotPCA(rld, intgroup=c("Condition", "Gender"), ntop=33210,returnData=TRUE) 
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+nudge <- position_nudge(y = 0.5)
+pdf("Sample_label_PCA.pdf")
+ggplot(pcaData, aes(PC1, PC2, color=Condition, shape=Gender)) +
+geom_point(size=3) + geom_text(aes(label = name), position = nudge) +
+xlab(paste0("PC1: ",percentVar[1],"% variance")) + ylab(paste0("PC2: ",percentVar[2],"% variance")) + coord_fixed()
+dev.off()
+
+
+### Heatmap
+select <- order(rowMeans(counts(dds,normalized=TRUE)),
+decreasing=TRUE)[1:33210]
+df <- as.data.frame(colData(dds)[,c("Condition","Gender")])
+pdf("/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Heatmap.pdf")
+pheatmap(assay(rld)[select,], cluster_rows=FALSE, show_rownames=FALSE, cluster_cols=FALSE, annotation_col=df)
+dev.off()
+
+### Sample distance
+sampleDists <- dist(t(assay(rld)))
+sampleDistMatrix <- as.matrix(sampleDists) 
+rownames(sampleDistMatrix) <- paste(rld$Condition, rld$Gender, sep="-")
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255) 
+pdf("/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Sample_Dis.pdf")
+pheatmap(sampleDistMatrix,
+          clustering_distance_rows=sampleDists,
+          clustering_distance_cols=sampleDists,
+          col=colors)
+dev.off()
+
+
+
+#### Detect outlier samples.
+pdf("/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/outlier.pdf")
+par(mar=c(8,5,2,2)) 
+boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2)
+dev.off()
+
+resultsNames(dds)
+[1] "Intercept"                        "Gender_Male_vs_Female"           
+[3] "Condition_Deletion_vs_Control"    "Condition_Duplication_vs_Control"
+
+**** For deletions.
+###### Export differential expression analysis of XO vs. XX.
+DelConres <- results(dds,contrast=c("Condition","Deletion","Control"))
+mcols(DelConres)$description
+[1] "mean of normalized counts for all samples"            
+[2] "log2 fold change (MLE): Condition Deletion vs Control"
+[3] "standard error: Condition Deletion vs Control"        
+[4] "Wald statistic: Condition Deletion vs Control"        
+[5] "Wald test p-value: Condition Deletion vs Control"     
+[6] "BH adjusted p-values"   
+
+#### Write all the genes into file.
+write.table(as.data.frame(DelConres),file="/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Del_vs_Con.txt",row.names = T, sep="\t",quote=F)
+#### Write only the sig genes into file.
+sigDelConres<-subset(DelConres, padj < 0.05)
+write.table(as.data.frame(sigDelConres),file="/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Sig_Del_vs_Con.txt",row.names = T, sep="\t",quote=F)
+
+
+**** For duplications.
+###### Export differential expression analysis of XO vs. XX.
+DupConres <- results(dds,contrast=c("Condition","Duplication","Control"))
+mcols(DupConres)$description
+[1] "mean of normalized counts for all samples"               
+[2] "log2 fold change (MLE): Condition Duplication vs Control"
+[3] "standard error: Condition Duplication vs Control"        
+[4] "Wald statistic: Condition Duplication vs Control"        
+[5] "Wald test p-value: Condition Duplication vs Control"     
+[6] "BH adjusted p-values"  
+
+#### Write all the genes into file.
+write.table(as.data.frame(DupConres),file="/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Dup_vs_Con.txt",row.names = T, sep="\t",quote=F)
+#### Write only the sig genes into file.
+sigDupConres<-subset(DupConres, padj < 0.05)
+write.table(as.data.frame(sigDupConres),file="/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Sig_Dup_vs_Con.txt",row.names = T, sep="\t",quote=F)
+
+
+pdf("ENSG00000229807.9_XIST.pdf")
+plotCounts(dds, gene="ENSG00000229807.9_XIST", intgroup="Gender")
+dev.off()
+
+pdf("ENSG00000103495.13_MAZ.pdf")
+plotCounts(dds, gene="ENSG00000103495.13_MAZ", intgroup="Condition")
+dev.off()
+
+pdf("ENSG00000149930.17_TAOK2.pdf")
+plotCounts(dds, gene="ENSG00000149930.17_TAOK2", intgroup="Condition")
+dev.off()
+
+pdf("ENSG00000169174.10_PCSK9.pdf")
+plotCounts(dds, gene="ENSG00000169174.10_PCSK9", intgroup="Condition")
+dev.off()
+
+################################################################################
+################################################################################
+################################################################################
+
+module load R/3.5
+library(DESeq2)
+library("RColorBrewer")
+library("ggplot2")
+library("pheatmap")
+setwd("/labs/dflev/ZXL/Tommy/iN_RNA-seq/DESeq2/Outlier_removed")
+sample<- read.table("iN_sample_anno.txt",head=T)
+gene_count <- read.table("iN_Gene_count_matrix.txt",head =T)
+
+#### Check the total reads for each sample.
+colSums(gene_count)
+iN_23X10_202_8      iN_5401_1 iN_56X16_101_2  iN_56X9_201_1  iN_56X9_201_2 
+      26059207       28171085       27493392       15424824       28265315 
+ iN_58X3_101_7  iN_58X3_101_8  iN_65X2_101_2      iN_6632_4       iN_726_1 
+      26996370       22324009       33434936       25000188       28898934 
+iN_81X16_101_4        iN_8738 
+      29538552       23250383
+
+#### Build matrix for DE analysis.
+dds <- DESeqDataSetFromMatrix(countData=round(gene_count,0), colData=sample, design=~ Gender + Condition)
+#### Filter genes without reads.
+dds <- dds[ rowSums(counts(dds)) > 1, ]
+dds
+#dim: 31619 12
+
+#### DE analysis.
+dds <- DESeq(dds)
+
+### PCA
+rld <- rlog(dds, blind=FALSE)
+### plot Condition.
+pdf("Condition_PCA.pdf")
+plotPCA(rld, intgroup=c("Condition"), ntop=31619)
+dev.off()
+pdf("Top_500_Condition_PCA.pdf")
+plotPCA(rld, intgroup=c("Condition"), ntop=500)
+dev.off()
+### plot Gender.
+pdf("Gender_PCA.pdf")
+plotPCA(rld, intgroup=c("Gender"), ntop=31619)
+dev.off()
+write.table(as.data.frame(assay(rld)),file="All_genes_rld.txt",row.names = T, sep="\t",quote=F)
+### plot Condition + Gender.
+pcaData <- plotPCA(rld, intgroup=c("Condition", "Gender"), ntop=31619,returnData=TRUE) 
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+pdf("PCA.pdf")
+ggplot(pcaData, aes(PC1, PC2, color=Condition, shape=Gender)) +
+geom_point(size=3) +
+xlab(paste0("PC1: ",percentVar[1],"% variance")) + ylab(paste0("PC2: ",percentVar[2],"% variance")) + coord_fixed()
+dev.off()
+
+### plot Condition + Gender.
+pcaData <- plotPCA(rld, intgroup=c("Condition", "Gender"), ntop=31619,returnData=TRUE) 
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+nudge <- position_nudge(y = 0.5)
+pdf("Sample_label_PCA.pdf")
+ggplot(pcaData, aes(PC1, PC2, color=Condition, shape=Gender)) +
+geom_point(size=3) + geom_text(aes(label = name), position = nudge) +
+xlab(paste0("PC1: ",percentVar[1],"% variance")) + ylab(paste0("PC2: ",percentVar[2],"% variance")) + coord_fixed()
+dev.off()
+
+### Heatmap
+select <- order(rowMeans(counts(dds,normalized=TRUE)),
+decreasing=TRUE)[1:31619]
+df <- as.data.frame(colData(dds)[,c("Condition","Gender")])
+pdf("Heatmap.pdf")
+pheatmap(assay(rld)[select,], cluster_rows=FALSE, show_rownames=FALSE, cluster_cols=FALSE, annotation_col=df)
+dev.off()
+
+### Sample distance
+sampleDists <- dist(t(assay(rld)))
+sampleDistMatrix <- as.matrix(sampleDists) 
+rownames(sampleDistMatrix) <- paste(rld$Condition, rld$Gender, sep="-")
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255) 
+pdf("Sample_Dis.pdf")
+pheatmap(sampleDistMatrix,
+          clustering_distance_rows=sampleDists,
+          clustering_distance_cols=sampleDists,
+          col=colors)
+dev.off()
+
+
+
+#### Detect outlier samples.
+pdf("outlier.pdf")
+par(mar=c(8,5,2,2)) 
+boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2)
+dev.off()
+
+resultsNames(dds)
+[1] "Intercept"                        "Gender_Male_vs_Female"           
+[3] "Condition_Deletion_vs_Control"    "Condition_Duplication_vs_Control"
+
+**** For deletions.
+###### Export differential expression analysis of XO vs. XX.
+DelConres <- results(dds,contrast=c("Condition","Deletion","Control"))
+mcols(DelConres)$description
+[1] "mean of normalized counts for all samples"            
+[2] "log2 fold change (MLE): Condition Deletion vs Control"
+[3] "standard error: Condition Deletion vs Control"        
+[4] "Wald statistic: Condition Deletion vs Control"        
+[5] "Wald test p-value: Condition Deletion vs Control"     
+[6] "BH adjusted p-values"   
+
+#### Write all the genes into file.
+write.table(as.data.frame(DelConres),file="Del_vs_Con.txt",row.names = T, sep="\t",quote=F)
+#### Write only the sig genes into file.
+sigDelConres<-subset(DelConres, padj < 0.05)
+write.table(as.data.frame(sigDelConres),file="Sig_Del_vs_Con.txt",row.names = T, sep="\t",quote=F)
+
+
+**** For duplications.
+###### Export differential expression analysis of XO vs. XX.
+DupConres <- results(dds,contrast=c("Condition","Duplication","Control"))
+mcols(DupConres)$description
+[1] "mean of normalized counts for all samples"               
+[2] "log2 fold change (MLE): Condition Duplication vs Control"
+[3] "standard error: Condition Duplication vs Control"        
+[4] "Wald statistic: Condition Duplication vs Control"        
+[5] "Wald test p-value: Condition Duplication vs Control"     
+[6] "BH adjusted p-values"  
+
+#### Write all the genes into file.
+write.table(as.data.frame(DupConres),file="Dup_vs_Con.txt",row.names = T, sep="\t",quote=F)
+#### Write only the sig genes into file.
+sigDupConres<-subset(DupConres, padj < 0.05)
+write.table(as.data.frame(sigDupConres),file="Sig_Dup_vs_Con.txt",row.names = T, sep="\t",quote=F)
+
+
+pdf("ENSG00000229807.9_XIST.pdf")
+plotCounts(dds, gene="ENSG00000229807.9_XIST", intgroup="Gender")
+dev.off()
+
+pdf("ENSG00000103495.13_MAZ.pdf")
+plotCounts(dds, gene="ENSG00000103495.13_MAZ", intgroup="Condition")
+dev.off()
+
+pdf("ENSG00000149930.17_TAOK2.pdf")
+plotCounts(dds, gene="ENSG00000149930.17_TAOK2", intgroup="Condition")
+dev.off()
+
+pdf("ENSG00000169174.10_PCSK9.pdf")
+plotCounts(dds, gene="ENSG00000169174.10_PCSK9", intgroup="Condition")
+dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
