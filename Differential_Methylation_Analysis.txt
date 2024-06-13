@@ -1,0 +1,62 @@
+DMR calling by Metilene
+###########################################
+##### Combine each individual's methylation level into one matrix.
+module load bedtools/2.26.0
+shared_dir="/labs/dflev/ZXL/Tommy/CpGiant/Bismark"
+perl /labs/dflev/ZXL/software/metilene_v0.2-6/metilene_input.pl -in1 $shared_dir/ips_14723x10_202-8-42515612/trimmed_ips-23x10_202-8_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/ips_14756x9_201-2-42521610/trimmed_ips-56x9_201-2_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/ips_14758x3_101-7-42519613/trimmed_ips-58x3_101-7_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/ips_14765x2_101-2-42530523/trimmed_ips-65x2_101-2_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/ips_6632-4-42838379/trimmed_ips-ctrl6_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/ips_726-1-42835390/trimmed_ips-ctrl7_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter -in2 $shared_dir/iN_14723x10_202-8-42839368/trimmed_in-23x10_202-8_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/iN_14758x3_101-7-42529626/trimmed_in-58x3_101-7_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/iN_14765x2_101-2-42529625/trimmed_in-65x2_101-2_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/iN_56x9_201-2/trimmed_in-56x9_201-2_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/iN_6632-4-42527619/trimmed_in-ctrl6_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter,$shared_dir/iN_726-1-42514605/trimmed_in-ctrl7_R1_bismark_bt2_pe.deduplicated.CpG_report.txt.CpG_report.txt.format.Moabs.txt.target.Input.sorted.filter -out /labs/dflev/ZXL/Tommy/CpGiant/Bismark/meth_ratio.txt -h1 ips -h2 iN
+
+###########################################
+#### Change the header for file meth_ratio.txt.
+sed -i "1s/.*/chrom\tpos\tips_14723x10_202-8-42515612\tips_14756x9_201-2-42521610\tips_14758x3_101-7-42519613\tips_14765x2_101-2-42530523\tips_6632-4-42838379\tips_726-1-42835390\tiN_14723x10_202-8-42839368\tiN_14758x3_101-7-42529626\tiN_14765x2_101-2-42529625\tiN_56x9_201-2\tiN_6632-4-42527619\tiN_726-1-42514605/" meth_ratio.txt
+
+#### Move meth_ratio.txt to folder metilene.
+cp meth_ratio.txt Format_meth_ratio
+sed -i "1s/.*/chrom\tpos\tips_dup_1\tips_dup_2\tips_del_1\tips_del_2\tips_con_1\tips_con_2\tin_dup_1\tin_del_1\tin_del_2\tin_dup_2\tin_con_1\tin_con_2/" Format_meth_ratio.txt
+
+###########################################
+#### Call DMRs.
+module load bedtools/2.26.0
+******* ips Dup vs Con
+/labs/dflev/ZXL/software/metilene_v0.2-6/metilene -m 3 -d 0 -f 1 -a ips_dup -b ips_con -X 2 -Y 2 Format_meth_ratio.txt > ips_Dup_vs_Con_DMR.txt
+
+perl /labs/dflev/ZXL/software/metilene_v0.2-6/metilene_output.pl -q ips_Dup_vs_Con_DMR.txt -o ips_Dup_vs_Con_Methdiff0.2.txt -c 3 -d 0.2 -a ips_dup -b ips_con
+
+******* ips Del vs Con
+/labs/dflev/ZXL/software/metilene_v0.2-6/metilene -m 3 -d 0 -f 1 -a ips_del -b ips_con -X 2 -Y 2 Format_meth_ratio.txt > ips_Del_vs_Con_DMR.txt
+
+perl /labs/dflev/ZXL/software/metilene_v0.2-6/metilene_output.pl -q ips_Del_vs_Con_DMR.txt -o ips_Del_vs_Con_Methdiff0.2.txt -c 3 -d 0.2 -a ips_del -b ips_con
+
+******* in Dup vs Con
+/labs/dflev/ZXL/software/metilene_v0.2-6/metilene -m 3 -d 0 -f 1 -a in_dup -b in_con -X 2 -Y 2 Format_meth_ratio.txt > in_Dup_vs_Con_DMR.txt
+
+perl /labs/dflev/ZXL/software/metilene_v0.2-6/metilene_output.pl -q in_Dup_vs_Con_DMR.txt -o in_Dup_vs_Con_Methdiff0.2.txt -c 3 -d 0.2 -a in_dup -b in_con
+
+******* in Del vs Con
+/labs/dflev/ZXL/software/metilene_v0.2-6/metilene -m 3 -d 0 -f 1 -a in_del -b in_con -X 2 -Y 2 Format_meth_ratio.txt > in_Del_vs_Con_DMR.txt
+
+perl /labs/dflev/ZXL/software/metilene_v0.2-6/metilene_output.pl -q in_Del_vs_Con_DMR.txt -o in_Del_vs_Con_Methdiff0.2.txt -c 3 -d 0.2 -a in_del -b in_con
+
+
+###########################################
+#### Overlap between comparisons.
+module load bedtools
+bedtools intersect -a ips_Del_vs_Con_Methdiff0.2.txt_qval.0.05.out -b ips_Dup_vs_Con_Methdiff0.2.txt_qval.0.05.out -wa -wb > ips_Del_Dup_Methdiff0.2.txt
+
+bedtools intersect -a in_Del_vs_Con_Methdiff0.2.txt_qval.0.05.out -b in_Dup_vs_Con_Methdiff0.2.txt_qval.0.05.out -wa -wb > in_Del_Dup_Methdiff0.2.txt
+
+bedtools intersect -a ips_Del_vs_Con_Methdiff0.2.txt_qval.0.05.out -b in_Del_vs_Con_Methdiff0.2.txt_qval.0.05.out -wa -wb > Del_iPS_iN_Methdiff0.2.txt
+
+bedtools intersect -a ips_Dup_vs_Con_Methdiff0.2.txt_qval.0.05.out -b in_Dup_vs_Con_Methdiff0.2.txt_qval.0.05.out -wa -wb > Dup_iPS_iN_Methdiff0.2.txt
+
+###########################################
+#### 16p11.2 region: chr16:29,570,001-30,190,000 (hg38)
+cd /labs/dflev/ZXL/Tommy/CpGiant/Bismark/metilene
+for file in *DMR.txt
+do
+awk '{if($1=="chr16" && $2>29570001 && $2<30190000 && $3>29570001 && $3<30190000){print $0}}' $file > 16p11.2_$file
+done
+
+
+
+
+
